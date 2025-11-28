@@ -1,63 +1,50 @@
 import streamlit as st
 import pandas as pd
-
-# Correct imports — only from real, existing functions
-from modules.portfolio_engine import load_portfolio
+from modules.portfolio_engine import load_portfolio_data
 from modules.zacks_engine import load_zacks_screens
-from modules.profit_risk_analyzer import (
-    calculate_profit_and_risk,
-    apply_tactical_flags
-)
 
-# === PAGE CONFIG ===
-st.set_page_config(page_title="Fox Valley Tactical Command Deck", page_icon="🧭", layout="wide")
+st.set_page_config(page_title="Fox Valley Tactical Command Deck", layout="wide")
 
+# === HEADER ===
 st.title("🧭 Fox Valley Tactical Command Deck — v7.7R")
-st.caption("🚀 Live Tactical Intelligence | Zacks Synergy | Profit + Risk Analyzer")
+st.subheader("🚀 Live Tactical Intelligence | Zacks Synergy | Portfolio Insights")
 
-
-# === LOAD PORTFOLIO ===
-portfolio = load_portfolio()
-
-if isinstance(portfolio, pd.DataFrame) and not portfolio.empty:
-    portfolio["Ticker"] = portfolio["Ticker"].astype(str).str.upper()
-    st.subheader("📊 Portfolio Overview")
-    st.dataframe(portfolio)
-else:
-    st.warning("⚠ No valid portfolio data found. Upload or verify your Portfolio file.")
-
-
-# === LOAD ZACKS FILES ===
+# === LOAD DATA ===
+portfolio = load_portfolio_data()
 zacks_files = load_zacks_screens()
-st.subheader("📥 Zacks Screening Files Loaded")
-st.write(f"📂 {len(zacks_files)} Screening Files Detected")
 
-for name in zacks_files:
-    st.write(f"📄 {name}")
-
-
-# === PROFIT & RISK ANALYSIS ===
-if isinstance(portfolio, pd.DataFrame) and not portfolio.empty:
-
-    # Apply profit & risk logic safely
-    st.subheader("💹 Tactical Profit & Risk Analysis")
-
-    df = calculate_profit_and_risk(portfolio)
-    df = apply_tactical_flags(df)
-
-    st.dataframe(
-        df[["Ticker", "Profit %", "Risk Category", "Tactical Action"]]
-    )
-
-    st.subheader("🎯 Tactical Action Grid")
-    st.dataframe(
-        df[["Ticker", "Quantity", "Profit %", "Risk Category", "Tactical Action"]]
-    )
-
+# === ZACKS FILE DISPLAY ===
+st.markdown("### 📥 Zacks Screening Files Loaded")
+if zacks_files:
+    st.success(f"📂 {len(zacks_files)} Screening Files Detected")
+    for file_name in zacks_files:
+        st.markdown(f"📄 {file_name}")
 else:
-    st.info("💡 Portfolio required to activate Tactical Action Grid.")
+    st.warning("⚠ No valid Zacks screening files detected in /data")
 
+# === PORTFOLIO SECTION ===
+st.markdown("---")
+st.markdown("### 📊 Portfolio Overview")
+
+if portfolio is None or portfolio.empty:
+    st.error("⚠ No valid portfolio data found. Please verify your Portfolio file in /data.")
+else:
+    st.success("📂 Portfolio Loaded Successfully")
+
+    # Display clean portfolio summary
+    columns_to_show = ["Ticker", "Quantity", "Current Value", "Cost Basis Per Share", 
+                       "Last Price", "Total Gain/Loss Dollar", "Total Gain/Loss Percent"]
+
+    available_columns = [col for col in columns_to_show if col in portfolio.columns]
+    st.dataframe(portfolio[available_columns], use_container_width=True)
+
+    total_value = portfolio["Current Value"].replace('[\$,]', '', regex=True).astype(float).sum()
+    st.metric("💰 Total Portfolio Value", f"${total_value:,.2f}")
+
+    st.markdown("---")
+    st.markdown("### 💹 Tactical Action Grid (Preview Mode)")
+    st.info("Tactical Action Grid will activate once full Profit & Risk Engine is stable.")
 
 # === FOOTER ===
-st.write("---")
+st.markdown("---")
 st.caption("Fox Valley Intelligence Engine — Built for Precision Tactical Execution")
