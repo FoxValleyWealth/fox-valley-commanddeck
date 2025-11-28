@@ -1,36 +1,41 @@
-import os
 import pandas as pd
+import os
 
-DATA_FOLDER = "data"
-
-def load_portfolio():
-    """
-    Load the latest Portfolio_Positions_*.csv file from /data.
-    Returns a cleaned DataFrame or None if not found.
-    """
+def load_portfolio_data():
     try:
-        files = [
-            f for f in os.listdir(DATA_FOLDER)
-            if f.startswith("Portfolio_Positions_") and f.endswith(".csv")
-        ]
-        if not files:
+        # Detect Fidelity-style portfolio file
+        portfolio_files = [f for f in os.listdir("data") if f.startswith("Portfolio_Positions")]
+        if not portfolio_files:
             return None
 
-        latest_file = sorted(files)[-1]  # Pick the most recent
-        full_path = os.path.join(DATA_FOLDER, latest_file)
+        # Always use the latest portfolio export
+        latest_file = sorted(portfolio_files)[-1]
+        df = pd.read_csv(f"data/{latest_file}")
 
-        df = pd.read_csv(full_path)
+        # Normalize column names for mapping
+        df.columns = df.columns.str.strip().str.replace(" ", "").str.replace("/", "").str.upper()
 
-        required_columns = {"Ticker", "Quantity", "Current Value", "Cost Basis"}
-        if not required_columns.issubset(df.columns):
-            print(f"❌ Missing required columns in {latest_file}")
-            return None
+        # Map Fidelity export to Command Deck schema
+        df = df.rename(columns={
+            "SYMBOL": "Ticker",
+            "DESCRIPTION": "Description",
+            "QUANTITY": "Quantity",
+            "LASTPRICE": "LastPrice",
+            "CURRENTVALUE": "CurrentValue"
+        })
 
+        # Ensure minimal required columns
+        required_columns = ["Ticker", "Description", "Quantity", "LastPrice", "CurrentValue"]
+        for col in required_columns:``
+            if col not in df.columns:
+                df[col] = None  # Placeholder for missing data
+
+        # Uppercase tickers
         df["Ticker"] = df["Ticker"].astype(str).str.upper()
-        df.fillna(0, inplace=True)
 
-        return df
+        # Trim to required dashboard schema
+        return df[required_columns]
 
     except Exception as e:
-        print(f"⚠ Portfolio load failed: {e}")
+        print(f"Portfolio Load Error: {e}")
         return None
