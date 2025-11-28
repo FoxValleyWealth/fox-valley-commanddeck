@@ -1,67 +1,84 @@
 import streamlit as st
 import pandas as pd
-from fox_valley_intelligence_engine import (
-    load_portfolio,
-    load_zacks_files,
-    crossmatch_with_zacks,
-    run_profit_risk_analyzer
-)
+import glob
 
-# =======================
-# PAGE CONFIGURATION
-# =======================
+# === PAGE CONFIG ===
 st.set_page_config(page_title="Fox Valley Tactical Command Deck", layout="wide")
 
-st.title("🧭 Fox Valley Tactical Command Deck — v7.6R")
-st.markdown("🚀 Live Tactical Intelligence | Zacks Synergy | Profit + Risk Analyzer")
+st.title("🧭 Fox Valley Tactical Command Deck — v7.7R")
+st.caption("🚀 Live Tactical Intelligence | Zacks Synergy | Profit + Risk Analyzer")
 
-# =======================
-# LOAD DATA
-# =======================
-portfolio_df = load_portfolio()
-zacks_files = load_zacks_files()
+# === LOAD PORTFOLIO ===
+portfolio_files = glob.glob("data/Portfolio_Positions_*.csv")
+if portfolio_files:
+    portfolio_file = sorted(portfolio_files)[-1]
+    portfolio = pd.read_csv(portfolio_file)
+    portfolio["Ticker"] = portfolio["Ticker"].str.upper()
 
-# =======================
-# PORTFOLIO DISPLAY
-# =======================
-if portfolio_df is not None:
-    st.subheader("📊 Portfolio Overview")
-    st.dataframe(portfolio_df, use_container_width=True)
+    st.success(f"📊 Portfolio Loaded: {portfolio_file}")
+else:
+    st.error("⚠ No Portfolio File Available")
+    st.stop()
 
-# =======================
-# ZACKS FILE LOADING STATUS
-# =======================
+# === LOAD ZACKS DATA ===
+zacks_files = glob.glob("data/zacks_custom_screen_*.csv")
 if zacks_files:
-    st.subheader("📥 Zacks Screening Files Loaded")
-    st.success(f"📂 {len(zacks_files)} Screening Files Detected")
+    zacks_all = pd.concat([pd.read_csv(f) for f in zacks_files], ignore_index=True)
+    zacks_all["Ticker"] = zacks_all["Ticker"].astype(str).str.upper()
 
-    # Display each Zacks file separately with highlighting
-    for category, df in zacks_files.items():
-        st.markdown(f"### 📄 {category} Screen")
-        if "Zacks Rank" in df.columns:
-            df["🚨 Rank"] = df["Zacks Rank"].apply(lambda x: "⭐" if int(x) == 1 else "")
-            st.dataframe(df[["Ticker", "Company Name", "Zacks Rank", "🚨 Rank"]].head(20), use_container_width=True)
-        else:
-            st.warning(f"⚠ 'Zacks Rank' column missing in {category}")
+    st.success(f"📂 {len(zacks_files)} Zacks Screening Files Loaded")
+else:
+    st.error("⚠ No Zacks Files Found")
+    st.stop()
 
-# =======================
-# EXECUTE CROSSMATCH
-# =======================
-if st.button("🔍 Execute Tactical Crossmatch — Actionable Orders"):
-    result = crossmatch_with_zacks(portfolio_df, zacks_files)
-    if result is not None:
-        st.subheader("🛡 Tactical Intelligence Output — Live Orders")
-        st.dataframe(result, use_container_width=True)
+# === MERGE LIVE CROSSMATCH ===
+merged = pd.merge(portfolio, zacks_all, on="Ticker", how="inner")
 
-# =======================
-# PROFIT + RISK ANALYZER
-# =======================
-if st.button("💹 Run Profit & Risk Analyzer"):
-    run_profit_risk_analyzer()
-    st.success("📁 Profit & Risk Report Generated — Check Root Folder")
+display_cols = [
+    "Ticker", "Quantity", "Last Price", "Current Value",
+    "Zacks Rank", "Company Name",
+    "Total Gain/Loss Percent", "Risk Category", "Tactical Action"
+]
 
-# =======================
-# FOOTER
-# =======================
+available_cols = [c for c in display_cols if c in merged.columns]
+
+# === COLOR HIGHLIGHTING ===
+def highlight_zacks(val):
+    if val == 1:
+        return "background-color: gold; font-weight: bold;"
+    elif val == 2:
+        return "background-color: lightgreen;"
+    return ""
+
+def highlight_action(val):
+    if "Strong Buy" in val:
+        return "background-color: lightgreen; font-weight: bold;"
+    elif "Trim" in val:
+        return "background-color: lightcoral; font-weight: bold;"
+    elif "Hold" in val:
+        return "background-color: lightblue;"
+    return ""
+
+# === DISPLAY CROSSMATCH GRID ===
+if not merged.empty:
+    st.subheader("🛡 Tactical Action Grid — Live Holdings Intelligence")
+    st.caption("Real-Time Holdings | Zacks Rank | Profit Status | Tactical Actions")
+
+    styled_df = merged[available_cols].style.applymap(highlight_zacks, subset=["Zacks Rank"]) \
+                                           .applymap(highlight_action, subset=["Tactical Action"])
+
+    st.dataframe(styled_df, use_container_width=True)
+
+    # Downloadable CSV
+    csv = merged[available_cols].to_csv(index=False)
+    st.download_button(
+        label="📥 Download Tactical Action Grid (CSV)",
+        data=csv,
+        file_name="tactical_action_grid.csv",
+        mime="text/csv"
+    )
+else:
+    st.warning("📭 No actionable crossmatch found between portfolio & Zacks data.")
+
 st.markdown("---")
-st.caption("Fox Valley Intelligence Engine — Built for Precision Tactical Execution")
+st.caption("🧭 Fox Valley Intelligence Engine — Built for Precision Tactical Execution")
