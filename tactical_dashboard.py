@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-from modules.portfolio_engine import load_portfolio_data
-from modules.zacks_engine import load_zacks_screens
+import os
 
 st.set_page_config(page_title="Fox Valley Tactical Command Deck", layout="wide")
 
@@ -9,9 +8,29 @@ st.set_page_config(page_title="Fox Valley Tactical Command Deck", layout="wide")
 st.title("🧭 Fox Valley Tactical Command Deck — v7.7R")
 st.subheader("🚀 Live Tactical Intelligence | Zacks Synergy | Portfolio Insights")
 
-# === LOAD DATA ===
-portfolio = load_portfolio_data()
-zacks_files = load_zacks_screens()
+# === DIRECT PORTFOLIO LOADER (No module import) ===
+def load_portfolio_direct():
+    try:
+        files = [f for f in os.listdir("data") if f.startswith("Portfolio_Positions") and f.endswith(".csv")]
+        if not files:
+            return None
+        latest_file = sorted(files)[-1]
+        df = pd.read_csv(os.path.join("data", latest_file))
+        return df
+    except Exception:
+        return None
+
+# === SIMPLE ZACKS SCREEN DETECTOR (No module import) ===
+def load_zacks_screens_simple():
+    try:
+        files = [f for f in os.listdir("data") if f.startswith("zacks") or "Growth" in f or "Defensive" in f]
+        return files
+    except Exception:
+        return []
+
+# === FETCH DATA ===
+portfolio = load_portfolio_direct()
+zacks_files = load_zacks_screens_simple()
 
 # === ZACKS FILE DISPLAY ===
 st.markdown("### 📥 Zacks Screening Files Loaded")
@@ -22,29 +41,23 @@ if zacks_files:
 else:
     st.warning("⚠ No valid Zacks screening files detected in /data")
 
-# === PORTFOLIO SECTION ===
 st.markdown("---")
+
+# === PORTFOLIO SECTION ===
 st.markdown("### 📊 Portfolio Overview")
 
 if portfolio is None or portfolio.empty:
-    st.error("⚠ No valid portfolio data found. Please verify your Portfolio file in /data.")
+    st.error("⚠ No valid portfolio data found. Check /data folder.")
 else:
     st.success("📂 Portfolio Loaded Successfully")
 
-    # Display clean portfolio summary
-    columns_to_show = ["Ticker", "Quantity", "Current Value", "Cost Basis Per Share", 
-                       "Last Price", "Total Gain/Loss Dollar", "Total Gain/Loss Percent"]
+    display_columns = ["Symbol", "Quantity", "Current Value", "Last Price", "Total Gain/Loss Dollar", "Total Gain/Loss Percent"]
+    available_cols = [c for c in display_columns if c in portfolio.columns]
 
-    available_columns = [col for col in columns_to_show if col in portfolio.columns]
-    st.dataframe(portfolio[available_columns], use_container_width=True)
+    st.dataframe(portfolio[available_cols], use_container_width=True)
 
-    total_value = portfolio["Current Value"].replace('[\$,]', '', regex=True).astype(float).sum()
+    total_value = pd.to_numeric(portfolio["Current Value"].replace('[\$,]', '', regex=True), errors='coerce').sum()
     st.metric("💰 Total Portfolio Value", f"${total_value:,.2f}")
 
-    st.markdown("---")
-    st.markdown("### 💹 Tactical Action Grid (Preview Mode)")
-    st.info("Tactical Action Grid will activate once full Profit & Risk Engine is stable.")
-
-# === FOOTER ===
 st.markdown("---")
-st.caption("Fox Valley Intelligence Engine — Built for Precision Tactical Execution")
+st.caption("Fox Valley Intelligence Engine — Stabilized Tactical Core v7.7R")
