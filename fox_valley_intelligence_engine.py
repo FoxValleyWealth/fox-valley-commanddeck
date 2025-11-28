@@ -3,16 +3,14 @@ import pandas as pd
 from tabulate import tabulate
 from datetime import datetime
 
-# Module imports (already committed)
 from modules.tactical_scoring_engine import apply_tactical_rules
 from modules.risk_and_reporting_engine import apply_stop_logic, export_to_csv, export_to_pdf
-from modules.profit_risk_analyzer import evaluate_profit_risk  # NEW MODULE INTEGRATION
+from modules.profit_risk_analyzer import run_profit_risk_analyzer  # FIXED
 
 DATA_PATH = "data"
 
 
 def load_most_recent_file(keyword: str):
-    """Return the most recent CSV file in /data containing a keyword."""
     if not os.path.isdir(DATA_PATH):
         print(f"⚠ Data folder not found: {DATA_PATH}")
         return None
@@ -25,30 +23,25 @@ def load_most_recent_file(keyword: str):
         return None
 
     files.sort()
-    latest = files[-1]
-    return os.path.join(DATA_PATH, latest)
+    return os.path.join(DATA_PATH, files[-1])
 
 
 def load_portfolio():
-    """Load latest portfolio CSV."""
     path = load_most_recent_file("Portfolio")
     if not path:
-        print("⚠ No portfolio file found in /data.")
+        print("⚠ No portfolio file found.")
         return None
 
     print(f"\n🗂 Loading Portfolio File: {os.path.basename(path)}")
     try:
-        df = pd.read_csv(path)
-        df['Ticker'] = df['Ticker'].astype(str).str.upper()
-        return df
+        return pd.read_csv(path)
     except Exception as e:
         print(f"⚠ Error loading portfolio file: {e}")
         return None
 
 
 def load_zacks_files():
-    """Load latest Zacks screens for Growth and Defensive groups."""
-    categories = ["Growth", "Defensive"]
+    categories = ["Growth1", "Growth 1", "Growth2", "Growth 2", "Defensive"]
     loaded = {}
 
     for cat in categories:
@@ -56,68 +49,66 @@ def load_zacks_files():
         if path:
             print(f"📥 Loaded Zacks File: {os.path.basename(path)}")
             try:
-                zdf = pd.read_csv(path)
-                zdf['Ticker'] = zdf['Ticker'].astype(str).str.upper()
-                loaded[cat] = zdf
+                loaded[cat] = pd.read_csv(path)
             except Exception as e:
                 print(f"⚠ Error loading {path}: {e}")
 
     if not loaded:
-        print("\n⚠ No Zacks screening files found in /data.")
+        print("\n⚠ No Zacks screening files found.")
     return loaded
 
 
 def show_portfolio_summary(df: pd.DataFrame):
-    """Show high-level portfolio metrics."""
     if df is None or df.empty:
         print("⚠ No portfolio data to analyze.")
         return
 
-    cols = [c for c in ["Ticker", "Quantity", "Last Price", "Current Value", "Total Gain/Loss Percent"] if c in df.columns]
+    if {"Quantity", "Last Price"}.issubset(df.columns):
+        df["Value"] = pd.to_numeric(df["Quantity"], errors="coerce") * pd.to_numeric(df["Last Price"].replace('[\$,]', '', regex=True), errors="coerce")
+        total_value = df["Value"].sum()
+    else:
+        total_value = None
 
-    print("\n📊 Portfolio Holdings Overview")
+    cols = [c for c in ["Ticker", "Quantity", "Last Price", "Value"] if c in df.columns]
+    print("\n📊 Portfolio Summary")
     print(tabulate(df[cols].head(20), headers="keys", tablefmt="github", floatfmt=".2f"))
 
-    if "Current Value" in df.columns:
-        total_value = df["Current Value"].sum()
+    if total_value is not None:
         print(f"\n💰 Estimated Total Portfolio Value: ${total_value:,.2f}")
 
 
 def crossmatch_with_zacks(portfolio_df: pd.DataFrame, zacks_data: dict):
-    """Match tickers across Zacks screens and apply tactical logic."""
-    if portfolio_df is None or portfolio_df.empty:
-        print("\n⚠ No portfolio data available for tactical analysis.")
+    if portfolio_df is None or not zacks_data:
+        print("\n⚠ Missing portfolio or Zacks data.")
         return None
 
-    if not zacks_data:
-        print("\n⚠ No Zacks datasets available for tactical crossmatch.")
-        return None
+    portfolio_df = portfolio_df.copy()
+    portfolio_df["Ticker"] = portfolio_df["Ticker"].astype(str).str.upper()
 
     all_matches = []
-
     for category, zdf in zacks_data.items():
         if "Ticker" not in zdf.columns:
             continue
+        zdf = zdf.copy()
+        zdf["Ticker"] = zdf["Ticker"].astype(str).str.upper()
 
-        merged = pd.merge(portfolio_df, zdf, on="Ticker", how="inner", suffixes=("", "_z"))
+        if "Zacks Rank" in zdf.columns:
+            zdf["Zacks Rank"] = pd.to_numeric(zdf["Zacks Rank"], errors="coerce")
+
+        merged = pd.merge(portfolio_df, zdf, on="Ticker", how="inner")
         if not merged.empty:
             merged["Screen Category"] = category
             all_matches.append(merged)
 
     if not all_matches:
-        print("\n📭 No matches from Zacks screens.")
+        print("\n📭 No matches found between portfolio and Zacks data.")
         return None
 
     result = pd.concat(all_matches, ignore_index=True)
-
-    # Apply tactical logic: Rank + Stop loss controls
     result = apply_tactical_rules(result)
     result = apply_stop_logic(result)
 
-    display_cols = [
-        "Ticker", "Quantity", "Current Value", "Zacks Rank",
-        "Action", "Screen Category", "Stop Recommendation"
-    ]
+    display_cols = ["Ticker", "Zacks Rank", "Screen Category", "Action", "Stop Recommendation"]
     display_cols = [c for c in display_cols if c in result.columns]
 
     print("\n🛡 Tactical Intelligence Output — Actionable Orders")
@@ -134,23 +125,16 @@ def main():
     print("==================================================================\n")
     print(f"Run Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-    # Load core data
     portfolio_df = load_portfolio()
     zacks_files = load_zacks_files()
 
-    # Display portfolio insights
     show_portfolio_summary(portfolio_df)
+    crossmatch_with_zacks(portfolio_df, zacks_files)
 
-    # Tactical crossmatch
-    tactical_df = crossmatch_with_zacks(portfolio_df, zacks_files)
+    print("\n🚀 Engine Execution Complete — Final Assembly Online.\n")
 
-    # Profit & Risk Module
-    if tactical_df is not None:
-        evaluate_profit_risk(tactical_df)
-
-    print("\n🚀 Engine Execution Complete — Final Assembly Online.")
-    print("📁 Reports exported: tactical_intelligence_report.csv & .pdf")
-    print("📈 Profit-Risk analyzer executed successfully.\n")
+    print("\n🔍 Running Profit & Risk Analyzer…")
+    run_profit_risk_analyzer()
 
 
 if __name__ == "__main__":
