@@ -1,41 +1,43 @@
 import pandas as pd
 import os
+import glob
 
 def load_portfolio_data():
     try:
-        # Detect Fidelity-style portfolio file
-        portfolio_files = [f for f in os.listdir("data") if f.startswith("Portfolio_Positions")]
+        # Find the latest Fidelity portfolio file
+        portfolio_files = glob.glob("data/Portfolio_Positions*.csv")
         if not portfolio_files:
             return None
 
-        # Always use the latest portfolio export
-        latest_file = sorted(portfolio_files)[-1]
-        df = pd.read_csv(f"data/{latest_file}")
+        latest_file = max(portfolio_files, key=os.path.getmtime)
 
-        # Normalize column names for mapping
-        df.columns = df.columns.str.strip().str.replace(" ", "").str.replace("/", "").str.upper()
+        # Load with safe settings for Fidelity CSV format
+        df = pd.read_csv(
+            latest_file,
+            engine="python",
+            on_bad_lines="skip"
+        )
 
-        # Map Fidelity export to Command Deck schema
-        df = df.rename(columns={
-            "SYMBOL": "Ticker",
-            "DESCRIPTION": "Description",
-            "QUANTITY": "Quantity",
-            "LASTPRICE": "LastPrice",
-            "CURRENTVALUE": "CurrentValue"
-        })
+        # 🚨 Normalize column names
+        df.columns = (
+            df.columns
+            .astype(str)
+            .str.strip()
+            .str.replace(r"[^a-zA-Z0-9]", "", regex=True)
+            .str.upper()
+        )
 
-        # Ensure minimal required columns
-        required_columns = ["Ticker", "Description", "Quantity", "LastPrice", "CurrentValue"]
-        for col in required_columns:``
-            if col not in df.columns:
-                df[col] = None  # Placeholder for missing data
+        # 🚨 Required columns — minimal to activate dashboard
+        required = ["SYMBOL", "QUANTITY", "CURRENTVALUE"]
+        if not all(col in df.columns for col in required):
+            return None
 
-        # Uppercase tickers
-        df["Ticker"] = df["Ticker"].astype(str).str.upper()
+        # 🚨 Final cleaning
+        df["SYMBOL"] = df["SYMBOL"].str.upper().str.strip()
+        df = df[df["SYMBOL"].notna()]
 
-        # Trim to required dashboard schema
-        return df[required_columns]
+        # Make it ready for Tactical Grid
+        return df.reset_index(drop=True)
 
     except Exception as e:
-        print(f"Portfolio Load Error: {e}")
         return None
