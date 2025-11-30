@@ -13,22 +13,20 @@ from modules.command_report_builder import build_command_report
 from modules.pdf_export_engine import export_report_to_pdf
 from modules.report_archive_engine import archive_report
 from modules.executive_presentation import generate_executive_presentation
+from modules.slide_pdf_export_engine import export_slides_to_pdf
 
 
 # =========================================================
-# 🧭 Fox Valley Tactical Command Deck — v7.7R with Presentation Mode
+# 🧭 Fox Valley Tactical Command Deck — v7.7R FullExecDeck
 # =========================================================
-
 st.set_page_config(page_title="Fox Valley Tactical Command Deck", layout="wide")
-
-st.title("🧭 Fox Valley Tactical Command Deck — v7.7R Unified Presentation Core")
+st.title("🧭 Fox Valley Tactical Command Deck — v7.7R Full Executive Authority")
 st.caption("Portfolio ║ Risk ║ Tactical Alerts ║ Intel Brief ║ Exec Report ║ Archive ║ Presentation")
 
 
 # =========================================================
 # 📂 Sidebar Inputs
 # =========================================================
-
 st.sidebar.header("📂 Data Inputs")
 portfolio_file = st.sidebar.file_uploader("Portfolio CSV", type=["csv"])
 
@@ -44,7 +42,6 @@ default_trailing_stop_pct = st.sidebar.slider("Default Trailing Stop (%)", 1, 25
 # =========================================================
 # 📊 Portfolio Processing
 # =========================================================
-
 if portfolio_file:
     portfolio_df = load_portfolio_data(portfolio_file)
     cash_value = load_cash_position(manual_cash)
@@ -67,7 +64,6 @@ else:
 # =========================================================
 # 🎯 Zacks Tactical Candidates
 # =========================================================
-
 if any([growth1_file, growth2_file, dividend_file]):
     st.subheader("🎯 Zacks Tactical Candidates")
     zacks_df = merge_zacks_screens({
@@ -87,7 +83,6 @@ if any([growth1_file, growth2_file, dividend_file]):
 # =========================================================
 # 🧠 Tactical Scoring Engine
 # =========================================================
-
 st.subheader("🧠 Tactical Scoring Engine")
 scored_df = calculate_tactical_scores(ts_df)
 st.dataframe(scored_df, use_container_width=True)
@@ -96,30 +91,27 @@ st.dataframe(scored_df, use_container_width=True)
 # =========================================================
 # 🛡 Risk Heatmap
 # =========================================================
-
-st.subheader("🛡 Risk Heatmap")
+st.subheader("🛡 Risk Heatmap — Trailing Stop Risk Alignment")
 risk_df = generate_risk_heatmap(ts_df)
 st.dataframe(risk_df, use_container_width=True)
 
 
 # =========================================================
-# 🚨 Tactical Alerts
+# 🚨 Tactical Alerts Engine
 # =========================================================
-
-st.subheader("🚨 Tactical Alerts Dashboard")
+st.subheader("🚨 Tactical Alerts")
 alerts_list = generate_tactical_alerts(
     portfolio_df=ts_df,
     scored_df=scored_df,
-    zacks_df=zacks_df if 'zacks_df' in locals() else None,
+    zacks_df=zacks_df if 'zacks_df' in locals() else None
 )
 alert_df = alerts_to_dataframe(alerts_list)
 st.dataframe(alert_df, use_container_width=True)
 
 
 # =========================================================
-# 📘 Tactical Intelligence Brief
+# 📘 Intelligence Brief
 # =========================================================
-
 st.subheader("📘 Tactical Intelligence Brief")
 brief_text = generate_intelligence_brief(
     portfolio_df=portfolio_df,
@@ -131,10 +123,9 @@ st.text_area("🛰 Strategic Narrative", brief_text, height=350)
 
 
 # =========================================================
-# 📑 Report Export & Archive
+# 📑 Tactical Report & Archive
 # =========================================================
-
-st.subheader("📑 Report Export & Archive")
+st.subheader("📑 Tactical Report & Archive")
 report_text = build_command_report(
     portfolio_df=portfolio_df,
     risk_df=risk_df,
@@ -142,7 +133,6 @@ report_text = build_command_report(
     tactical_scores_df=scored_df,
     intelligence_brief_text=brief_text
 )
-
 st.text_area("📋 Full Report Preview", report_text, height=450)
 
 colA, colB, colC = st.columns(3)
@@ -151,12 +141,7 @@ with colA:
     if st.button("📄 Export Tactical Report (PDF)"):
         pdf_file = export_report_to_pdf(report_text)
         with open(pdf_file, "rb") as f:
-            st.download_button(
-                label="⬇ Download Tactical Report (PDF)",
-                data=f,
-                file_name=pdf_file,
-                mime="application/pdf",
-            )
+            st.download_button("⬇ Download Tactical Report (PDF)", f, pdf_file)
 
 with colB:
     if st.button("🏛 Export Executive Briefing (PDF)"):
@@ -165,24 +150,17 @@ with colB:
             filename="Fox_Valley_Executive_Tactical_Briefing.pdf"
         )
         with open(exec_file, "rb") as f:
-            st.download_button(
-                label="🏛 Download Executive Briefing (PDF)",
-                data=f,
-                file_name=exec_file,
-                mime="application/pdf",
-            )
+            st.download_button("🏛 Download Executive Briefing (PDF)", f, exec_file)
 
 with colC:
     if st.button("🗄 Archive Report"):
-        archived_file = export_report_to_pdf(report_text)
-        archived_file = archive_report(archived_file)
+        archived_file = archive_report(export_report_to_pdf(report_text))
         st.success(f"🗄 Archived to: {archived_file}")
 
 
 # =========================================================
 # 🏛 Executive Presentation Mode — Slide Viewer
 # =========================================================
-
 st.markdown("---")
 st.subheader("🏛 Executive Presentation Mode — Slide Viewer")
 
@@ -197,7 +175,7 @@ slides = generate_executive_presentation(
 if "slide_index" not in st.session_state:
     st.session_state.slide_index = 0
 
-col_prev, col_next = st.columns([1, 1])
+col_prev, col_next, col_export = st.columns([1, 1, 2])
 
 with col_prev:
     if st.button("⬅ Previous Slide") and st.session_state.slide_index > 0:
@@ -207,6 +185,12 @@ with col_next:
     if st.button("Next Slide ➡") and st.session_state.slide_index < len(slides) - 1:
         st.session_state.slide_index += 1
 
+with col_export:
+    if st.button("📄 Export Full Slide Deck (PDF)"):
+        export_file = export_slides_to_pdf(slides)
+        with open(export_file, "rb") as f:
+            st.download_button("⬇ Download Slide Deck (PDF)", f, export_file)
+
 current_slide = slides[st.session_state.slide_index]
 st.markdown(f"### 📑 Slide {st.session_state.slide_index + 1} — {current_slide['title']}")
 st.text_area("", current_slide["content"], height=350)
@@ -215,7 +199,6 @@ st.text_area("", current_slide["content"], height=350)
 # =========================================================
 # 🛠 Tactical Order Simulation
 # =========================================================
-
 st.subheader("🛠 Tactical Order Simulation")
 col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
 
@@ -233,6 +216,5 @@ with col4:
 # =========================================================
 # FOOTER
 # =========================================================
-
 st.markdown("---")
-st.caption("🧭 Fox Valley Intelligence Engine — v7.7R Presentation Core")
+st.caption("🧭 Fox Valley Intelligence Engine — v7.7R Full Executive Presentation Core")
