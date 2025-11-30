@@ -10,21 +10,19 @@ from modules.intelligence_brief import generate_intelligence_brief
 from modules.risk_heatmap_engine import generate_risk_heatmap
 from modules.tactical_alerts import generate_tactical_alerts, alerts_to_dataframe
 from modules.command_report_builder import build_command_report
-from modules.pdf_export_engine import export_report_to_pdf
+from modules.pdf_export_engine import export_report_to_pdf  # EXECUTIVE FORMAT INCLUDED
 from modules.report_archive_engine import archive_report
-
-import os
 
 
 # =========================================================
 # 🧭 Fox Valley Tactical Command Deck — v7.7R Unified Dashboard
-# Portfolio | Risk | Scores | Alerts | Intel | PDF | Archive
+# Includes Tactical Report | Executive BOD Format | Archive | Risk | Intel | Alerts
 # =========================================================
 
 st.set_page_config(page_title="Fox Valley Tactical Command Deck", layout="wide")
 
-st.title("🧭 Fox Valley Tactical Command Deck — v7.7R Unified Core")
-st.caption("Portfolio ║ Risk ║ Tactical Alerts ║ Intelligence Brief ║ PDF Export ║ Archive System")
+st.title("🧭 Fox Valley Tactical Command Deck — v7.7R")
+st.caption("Portfolio ║ Risk ║ Tactical Alerts ║ Intelligence Brief ║ PDF Export ║ Exec Report ║ Archive")
 
 
 # =========================================================
@@ -91,9 +89,6 @@ if any([growth1_file, growth2_file, dividend_file]):
         st.markdown("#### 🔥 Rank 1 Tactical Opportunities")
         st.dataframe(extract_rank1_candidates(zacks_df), use_container_width=True)
 
-else:
-    st.info("Upload Zacks CSV files to activate Tactical Candidate analysis.")
-
 
 # =========================================================
 # 🧠 Tactical Scoring Engine
@@ -142,10 +137,10 @@ st.text_area("🛰 Strategic Narrative Report", brief_text, height=350)
 
 
 # =========================================================
-# 📑 Command Report Export & Archive System
+# 📑 Command Report Export System
 # =========================================================
 
-st.subheader("📑 Official Command Report Export")
+st.subheader("📑 Tactical Report & Executive Export")
 
 report_text = build_command_report(
     portfolio_df=portfolio_df,
@@ -157,41 +152,59 @@ report_text = build_command_report(
 
 st.text_area("📋 Full Report Preview", report_text, height=450)
 
-export_col, archive_col = st.columns(2)
+colA, colB, colC = st.columns(3)
 
-with export_col:
-    if st.button("📄 Export to PDF"):
-        pdf_file = export_report_to_pdf(report_text)
+# --- Standard Tactical PDF ---
+with colA:
+    if st.button("📄 Export Tactical Report (PDF)"):
+        pdf_file = export_report_to_pdf(report_text)  # default format
         with open(pdf_file, "rb") as f:
             st.download_button(
-                label="⬇ Download Tactical Command Report (PDF)",
+                label="⬇ Download Tactical Report",
                 data=f,
                 file_name=pdf_file,
                 mime="application/pdf",
             )
-        st.success(f"📄 Report generated: {pdf_file}")
+        st.success(f"📄 Tactical PDF Ready: {pdf_file}")
 
-with archive_col:
+# --- Executive BOD Briefing PDF ---
+with colB:
+    if st.button("🧭 Export BOD Executive Briefing (PDF)"):
+        exec_file = export_report_to_pdf(
+            report_text,
+            filename="Fox_Valley_Executive_Tactical_Briefing.pdf"
+        )
+        with open(exec_file, "rb") as f:
+            st.download_button(
+                label="🏛 Download Executive Briefing (PDF)",
+                data=f,
+                file_name=exec_file,
+                mime="application/pdf",
+            )
+        st.success(f"🏛 Executive BOD Briefing Ready: {exec_file}")
+
+# --- Archive Button ---
+with colC:
     if st.button("🗄 Archive Report"):
-        archived_path = export_report_to_pdf(report_text)
-        archived_path = archive_report(archived_path)
-        st.success(f"🗄 Report archived at: {archived_path}")
+        archived_file = export_report_to_pdf(report_text)
+        archived_file = archive_report(archived_file)
+        st.success(f"🗄 Report archived: {archived_file}")
 
 
 # =========================================================
-# 🛠 Tactical Action Controls
+# 🛠 Tactical Order Simulation
 # =========================================================
 
 st.subheader("🛠 Tactical Order Simulation")
 
-action_col1, action_col2, action_col3, action_col4 = st.columns([1, 1, 1, 2])
-with action_col1:
+a1, a2, a3, a4 = st.columns([1, 1, 1, 2])
+with a1:
     action_type = st.selectbox("Action", ["BUY", "SELL", "TRIM", "HOLD"])
-with action_col2:
+with a2:
     ticker = st.text_input("Ticker", "NVDA")
-with action_col3:
+with a3:
     shares = st.number_input("Shares", min_value=0, step=1)
-with action_col4:
+with a4:
     if st.button("Execute Tactical Order"):
         st.success(process_tactical_action(action_type, ticker, shares))
 
@@ -200,4 +213,4 @@ with action_col4:
 # FOOTER
 # =========================================================
 st.markdown("---")
-st.caption("🧭 Fox Valley Intelligence Engine — v7.7R Tactical Core")
+st.caption("🧭 Fox Valley Intelligence Engine — v7.7R Executive Command Core")
