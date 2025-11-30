@@ -17,10 +17,11 @@ from modules.trailing_stop_manager import (
     apply_custom_trailing_stops,
 )
 from modules.tactical_controls import process_tactical_action
+from modules.tactical_scoring_engine import calculate_tactical_scores
+from modules.intelligence_brief import generate_intelligence_brief
 
 # =========================================================
-# 🧭 Fox Valley Tactical Command Deck — v7.7R
-# Single-page stable dashboard using v7.7R modules
+# 🧭 Fox Valley Tactical Command Deck — v7.7R Final Integrated Build
 # =========================================================
 
 st.set_page_config(
@@ -29,29 +30,25 @@ st.set_page_config(
 )
 
 st.title("🧭 Fox Valley Tactical Command Deck — v7.7R Stable Core")
-
-st.caption("Fox Valley Intelligence Engine — Portfolio | Zacks | Trailing Stops | Tactical Controls")
+st.caption("Fox Valley Intelligence Engine — Portfolio | Zacks | Scoring | Stops | Tactical Narrative")
 
 # =========================================================
-# SIDEBAR — FILE INPUTS & CASH OVERRIDE
+# SIDEBAR — FILE INPUTS & SETTINGS
 # =========================================================
 st.sidebar.header("📂 Data Inputs")
 
 portfolio_file = st.sidebar.file_uploader("Portfolio CSV", type=["csv"])
 
-st.sidebar.markdown("---")
 st.sidebar.subheader("📥 Zacks Screen Files")
 growth1_file = st.sidebar.file_uploader("Growth 1 CSV", type=["csv"])
 growth2_file = st.sidebar.file_uploader("Growth 2 CSV", type=["csv"])
 dividend_file = st.sidebar.file_uploader("Defensive Dividends CSV", type=["csv"])
 
-st.sidebar.markdown("---")
 manual_cash = st.sidebar.number_input(
     "Manual Cash Override ($)",
     min_value=0.0,
     step=100.0,
     format="%.2f",
-    help="Enter your actual cash available to trade from Fidelity. Overrides any file value.",
 )
 
 default_trailing_stop_pct = st.sidebar.slider(
@@ -59,52 +56,44 @@ default_trailing_stop_pct = st.sidebar.slider(
     min_value=1,
     max_value=25,
     value=5,
-    step=1,
 )
 
-st.sidebar.markdown("---")
-st.sidebar.caption("Ensure CSV headers match: Ticker, Shares, Cost Basis, Current Price.")
+st.sidebar.caption("Ensure headers match: Ticker, Shares, Cost Basis, Current Price.")
 
 # =========================================================
-# MAIN LAYOUT
+# MAIN CONTENT
 # =========================================================
-col_portfolio, col_zacks = st.columns(2)
+col1, col2 = st.columns(2)
 
-# ---------------------------------------------------------
-# PORTFOLIO SECTION
-# ---------------------------------------------------------
-with col_portfolio:
+# =============== PORTFOLIO SIDE ===============
+with col1:
     st.subheader("📊 Portfolio Overview")
-
+    
     if portfolio_file:
-        # Load portfolio
         portfolio_df = load_portfolio_data(portfolio_file)
         cash_value = load_cash_position(manual_cash)
 
         summary = calculate_summary(portfolio_df, cash_value)
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Portfolio Value", f"${summary['total_value']:,}")
-        c2.metric("Cash Available", f"${summary['cash']:,}")
-        c3.metric("Total Gain/Loss", f"${summary['gain_loss_total']:,}")
+        c1.metric("Total Value", f"${summary['total_value']:,}")
+        c2.metric("Cash", f"${summary['cash']:,}")
+        c3.metric("Gain/Loss", f"${summary['gain_loss_total']:,}")
         c4.metric("Avg Gain/Loss %", f"{summary['avg_gain_loss_pct']:.2f}%")
 
         st.markdown("#### Current Holdings")
         st.dataframe(portfolio_df, use_container_width=True)
 
-        # Trailing stops
-        st.markdown("#### Trailing Stop Protection (Default %)")
-        ts_df = apply_trailing_stop(portfolio_df.copy(), trailing_stop_pct=default_trailing_stop_pct)
+        st.markdown("#### Trailing Stop Protection")
+        ts_df = apply_trailing_stop(portfolio_df.copy(), default_trailing_stop_pct)
         st.dataframe(ts_df, use_container_width=True)
 
     else:
-        st.info("Upload a **Portfolio CSV** in the sidebar to view holdings and trailing stops.")
+        st.info("Upload Portfolio CSV to enable holdings view.")
 
-# ---------------------------------------------------------
-# ZACKS SECTION
-# ---------------------------------------------------------
-with col_zacks:
-    st.subheader("🎯 Zacks Unified Candidates")
+# =============== ZACKS SIDE ===============
+with col2:
+    st.subheader("🎯 Zacks Tactical Opportunities")
 
     if growth1_file or growth2_file or dividend_file:
         files_dict = {
@@ -115,25 +104,47 @@ with col_zacks:
         zacks_df = merge_zacks_screens(files_dict)
 
         if not zacks_df.empty:
-            st.markdown("#### Unified Zacks Screen Universe")
+            st.markdown("#### Unified Zacks Screen")
             st.dataframe(prepare_zacks_export(zacks_df), use_container_width=True)
 
-            st.markdown("#### 🔥 Zacks Rank 1 Candidates (Highest Priority)")
+            st.markdown("#### 🔥 Rank 1 Priority Stocks")
             rank1_df = extract_rank1_candidates(zacks_df)
-            if not rank1_df.empty:
-                st.dataframe(prepare_zacks_export(rank1_df), use_container_width=True)
-            else:
-                st.info("No Zacks Rank 1 candidates found in uploaded screens.")
+            st.dataframe(rank1_df, use_container_width=True)
         else:
-            st.warning("No valid Zacks data loaded. Check file formats and try again.")
+            st.warning("No valid Zacks results.")
     else:
-        st.info("Upload at least one **Zacks CSV** (Growth1, Growth2, or Defensive Dividends) in the sidebar.")
+        st.info("Upload Zacks files to analyze tactical candidates.")
 
 # =========================================================
-# TACTICAL CONTROLS
+# 🧠 Tactical Scoring (Full Table)
+# =========================================================
+if portfolio_file:
+    st.markdown("### 🧠 Tactical Position Scoring")
+    scored_df = calculate_tactical_scores(ts_df)
+    st.dataframe(scored_df, use_container_width=True)
+
+# =========================================================
+# 📘 Tactical Intelligence Brief (Narrative Output)
 # =========================================================
 st.markdown("---")
-st.subheader("🛠 Tactical Action Controls (Simulation Only)")
+st.subheader("📘 Tactical Intelligence Brief")
+
+if portfolio_file:
+    brief_text = generate_intelligence_brief(
+        portfolio_df=portfolio_df,
+        zacks_df=zacks_df if (growth1_file or growth2_file or dividend_file) else None,
+        cash_value=cash_value,
+        scored_df=scored_df
+    )
+    st.text_area("🛰 Automated Tactical Narrative", brief_text, height=350)
+else:
+    st.info("Upload portfolio and optional Zacks files to generate Intelligence Brief.")
+
+# =========================================================
+# 🚀 Tactical Action Controls (Simulation Only)
+# =========================================================
+st.markdown("---")
+st.subheader("🛠 Tactical Action Controls (Simulation)")
 
 c1, c2, c3, c4 = st.columns([1, 1, 1, 2])
 
@@ -148,10 +159,9 @@ with c3:
 
 with c4:
     st.write("")
-    st.write("")
-    execute = st.button("Execute Tactical Action")
+    execute_action = st.button("Execute Tactical Order")
 
-if execute:
+if execute_action:
     result = process_tactical_action(action_type, ticker, shares)
     st.success(result)
 
