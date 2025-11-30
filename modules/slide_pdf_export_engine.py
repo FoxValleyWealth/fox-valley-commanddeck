@@ -1,7 +1,7 @@
 # =========================================================
 # 📄 Slide PDF Export Engine — v7.7R-BOD
-# Converts Executive Presentation slides into a boardroom PDF
-# Fully compatible with executive_presentation.py & dashboard
+# Converts Executive Presentation slides into boardroom-grade PDF
+# Fully compatible with Executive Presentation, Archive Engine, and Dashboard
 # =========================================================
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
@@ -11,34 +11,30 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 def export_slides_to_pdf(slides, filename="Fox_Valley_Executive_Presentation.pdf"):
     """
-    Accepts list of slides (title + content) and
-    generates fully formatted slide PDF deck.
-
-    slides = [
-        {"title": "...", "content": "..."},
-        ...
-    ]
+    Accepts list of slides (list of dicts with 'title' and 'content')
+    Generates fully formatted PDF slide deck.
     """
 
     styles = getSampleStyleSheet()
     story = []
-    
-    for slide in slides:
+
+    for i, slide in enumerate(slides, start=1):
         # Slide Title
-        story.append(Paragraph(f"<b>{slide['title']}</b>", styles["Title"]))
+        story.append(Paragraph(f"<b>{i}. {slide['title']}</b>", styles["Title"]))
         story.append(Spacer(1, 12))
-        
+
         # Slide Content
-        story.append(Paragraph(slide["content"].replace("\n", "<br/>"), styles["BodyText"]))
-        
-        # Page Break
+        content = slide["content"].replace("\n", "<br/>")
+        story.append(Paragraph(content, styles["BodyText"]))
+
+        # Add space and slide break
         story.append(PageBreak())
 
     # Build PDF
     doc = SimpleDocTemplate(
         filename,
         pagesize=LETTER,
-        title="Fox Valley Executive Presentation"
+        title="Fox Valley Executive Tactical Presentation"
     )
     doc.build(story)
 
