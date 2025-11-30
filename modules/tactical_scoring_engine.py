@@ -1,71 +1,88 @@
 import pandas as pd
 
+# =========================================================
+# 🧠 Tactical Scoring Engine — v7.7R Stable Build
+# Generates:
+# - Position Strength Score (0–100)
+# - Tactical Priority Label
+# - Risk Exposure Indicator
+# =========================================================
 
-def calculate_unrealized_gain(row):
+def calculate_tactical_scores(portfolio_df):
     """
-    Calculate unrealized gain/loss % based on cost basis.
-    Expects columns: 'Current Price' and 'Cost Basis' (per share).
-    Returns None if data is missing.
+    Adds tactical scoring components based on:
+    - Gain/Loss %
+    - Zacks Rank (if available)
+    - Trailing Stop Risk Level
+    - Momentum Factor (basic price change logic)
     """
-    try:
-        price = float(row.get("Current Price", None))
-        cost = float(row.get("Cost Basis", None))
-        if cost and cost != 0:
-            return ((price - cost) / cost) * 100.0
-    except Exception:
-        pass
-    return None
 
+    if portfolio_df.empty:
+        return portfolio_df
 
-def zacks_signal(rank):
-    """Map Zacks Rank (1-5) to basic tactical action."""
-    mapping = {
-        1: "Strong Buy",
-        2: "Buy",
-        3: "Hold",
-        4: "Trim",
-        5: "Sell",
-    }
-    try:
-        r = int(rank)
-        return mapping.get(r, "No Rating")
-    except Exception:
-        return "No Rating"
+    df = portfolio_df.copy()
 
+    # Ensure numeric
+    for col in ["Gain/Loss %", "Current Price", "Stop Price"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
-def apply_tactical_rules(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Apply Zacks-based tactical scoring and performance-based refinements.
-    Expects columns: 'Zacks Rank', 'Current Price', 'Cost Basis'.
-    """
-    df = df.copy()
+    # ===== 1) Score based on Gain/Loss % =====
+    df["GainScore"] = df["Gain/Loss %"].apply(lambda x: 40 if x > 25 else
+                                                     30 if x > 10 else
+                                                     20 if x > 0 else
+                                                     10)
 
-    # Gain/Loss %
-    df["Gain/Loss %"] = df.apply(calculate_unrealized_gain, axis=1)
-
-    # Base Action from Zacks rank
+    # ===== 2) Zacks Tactical Score (if integrated) =====
     if "Zacks Rank" in df.columns:
-        df["Action"] = df["Zacks Rank"].apply(zacks_signal)
+        df["ZacksScore"] = df["Zacks Rank"].apply(lambda x: 35 if x == 1 else
+                                                            25 if x == 2 else
+                                                            15 if x == 3 else
+                                                             0)
     else:
-        df["Action"] = "No Rating"
+        df["ZacksScore"] = 0
 
-    # Refinements based on performance
-    # If holding with strong gains, suggest trim
-    df.loc[
-        (df["Action"] == "Hold") & (df["Gain/Loss %"].notna()) & (df["Gain/Loss %"] > 20),
-        "Action",
-    ] = "Trim"
+    # ===== 3) Trailing Stop Risk =====
+    if "Stop Price" in df.columns:
+        df["RiskGap %"] = round(((df["Current Price"] - df["Stop Price"]) / df["Current Price"]) * 100, 2)
 
-    # If Zacks says Sell but gain is very high, call out profit taking
-    df.loc[
-        (df["Action"] == "Sell") & (df["Gain/Loss %"].notna()) & (df["Gain/Loss %"] > 30),
-        "Action",
-    ] = "Sell - Take Profits"
+        df["RiskScore"] = df["RiskGap %"].apply(lambda x: 25 if x >= 10 else
+                                                         15 if x >= 6 else
+                                                          5 if x > 0 else
+                                                          0)
+    else:
+        df["RiskScore"] = 5
 
-    # If Zacks says Buy and stock is down significantly, highlight dip buy
-    df.loc[
-        (df["Action"] == "Buy") & (df["Gain/Loss %"].notna()) & (df["Gain/Loss %"] < -10),
-        "Action",
-    ] = "Buy More (Dip Buy)"
+    # ===== 4) Momentum Score Placeholder =====
+    df["MomentumScore"] = 10  # Can be replaced later with real indicator
 
-    return df
+    # ===== Final Weighted Calculation =====
+    df["TacticalScore"] = round(
+        df["GainScore"] + df["ZacksScore"] + df["RiskScore"] + df["MomentumScore"], 0
+    )
+
+    # ===== Tactical Priority Label =====
+    def map_priority(score):
+        if score >= 80:
+            return "STRONG BUY"
+        elif score >= 60:
+            return "ACCUMULATE/HOLD"
+        elif score >= 40:
+            return "CAUTION / HOLD"
+        else:
+            return "AT RISK / TRIM"
+
+    df["Tactical Priority"] = df["TacticalScore"].apply(map_priority)
+
+    return df[[
+        "Ticker",
+        "Current Price",
+        "Gain/Loss %",
+        "Stop Price",
+        "RiskScore",
+        "ZacksScore",
+        "GainScore",
+        "MomentumScore",
+        "TacticalScore",
+        "Tactical Priority",
+    ]]
