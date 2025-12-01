@@ -1,97 +1,100 @@
 import pandas as pd
 
-# =========================================================
-# 📁 Portfolio Engine — v7.7R Final Stable Build
-# Loads, validates, calculates, and exports portfolio data
-# =========================================================
+# === Portfolio Engine — Full Tactical Version (v7.7R) ===
+# Powers: Portfolio Overview | Risk Heatmap | Tactical Scoring | Intelligence Brief | PDF Reports
 
-def load_portfolio_data(file_path):
+def load_portfolio_data(uploaded_file):
     """
-    Load portfolio CSV.
-    Required columns:
-        - Ticker
-        - Shares
-        - Cost Basis
-        - Current Price
-    Adds:
-        - Current Value
-        - Gain/Loss $
-        - Gain/Loss %
+    Fully tactical portfolio loader & calculator.
     """
+    if uploaded_file is None:
+        return None
+
     try:
-        df = pd.read_csv(file_path)
-        df.columns = df.columns.str.strip()
+        # Read uploaded CSV
+        df = pd.read_csv(uploaded_file)
 
-        required = ["Ticker", "Shares", "Cost Basis", "Current Price"]
-        if not all(col in df.columns for col in required):
-            raise ValueError(f"CSV missing required columns: {required}")
+        # Standardize expected columns
+        rename_map = {
+            'Symbol': 'Ticker',
+            'Quantity': 'Shares',
+            'Last Price': 'Current Price',
+            'Cost Basis Total': 'Cost Basis Total',
+            'Cost Basis': 'Cost Basis',  # Already processed version
+        }
+        df.rename(columns=rename_map, inplace=True)
 
-        df["Shares"] = pd.to_numeric(df["Shares"], errors="coerce").fillna(0)
-        df["Cost Basis"] = pd.to_numeric(df["Cost Basis"], errors="coerce").fillna(0)
-        df["Current Price"] = pd.to_numeric(df["Current Price"], errors="coerce").fillna(0)
+        # Clean numbers: remove $/commas and convert to numeric
+        currency_columns = ['Current Price', 'Cost Basis Total', 'Cost Basis']
+        for col in currency_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col].astype(str).str.replace('[\$,]', '', regex=True), errors='coerce')
 
-        df["Current Value"] = round(df["Shares"] * df["Current Price"], 2)
-        df["Gain/Loss $"] = round(df["Current Value"] - (df["Shares"] * df["Cost Basis"]), 2)
-        df["Gain/Loss %"] = round(
-            (df["Gain/Loss $"] / (df["Shares"] * df["Cost Basis"]).replace(0, pd.NA)) * 100, 2
-        )
+        # === Compute Cost Basis per share if only total is provided ===
+        if 'Cost Basis' not in df.columns and 'Cost Basis Total' in df.columns and 'Shares' in df.columns:
+            df['Cost Basis'] = df['Cost Basis Total'] / df['Shares']
+
+        # === Compute Market Value ===
+        df['Market Value'] = df['Shares'] * df['Current Price']
+
+        # === Compute Gain/Loss Dollar ===
+        df['Gain/Loss $'] = (df['Current Price'] - df['Cost Basis']) * df['Shares']
+
+        # === Compute Gain/Loss Percent ===
+        df['Gain/Loss %'] = ((df['Current Price'] - df['Cost Basis']) / df['Cost Basis']) * 100
+
+        # === Trailing Stop Price (Default 15% unless overridden in Dashboard) ===
+        DEFAULT_STOP_PERCENT = 15
+        df['Trailing Stop Price'] = df['Current Price'] * (1 - DEFAULT_STOP_PERCENT / 100)
+
+        # === Basic Risk Level (for Heatmap) ===
+        def risk_level(row):
+            if row['Gain/Loss %'] < -10:
+                return "High Risk"
+            elif row['Gain/Loss %'] < 0:
+                return "Moderate Risk"
+            else:
+                return "Stable"
+
+        df['Risk Level'] = df.apply(risk_level, axis=1)
+
+        # === Tactical Score Placeholder (integrates w/ Tactical Scoring Engine) ===
+        df['Tactical Score'] = None  # Will be filled by scoring engine
+
+        # === Final Clean Columns ===
+        required_cols = [
+            'Ticker', 'Shares', 'Cost Basis', 'Current Price',
+            'Market Value', 'Gain/Loss $', 'Gain/Loss %',
+            'Trailing Stop Price', 'Risk Level', 'Tactical Score'
+        ]
+        for col in required_cols:
+            if col not in df.columns:
+                df[col] = None
 
         return df
 
     except Exception as e:
-        print(f"Error loading portfolio data: {e}")
-        return pd.DataFrame()
+        print(f"ERROR — Portfolio Engine Load Failure: {e}")
+        return None
 
 
-def load_cash_position(manual_cash=None, file_value=None):
+def calculate_portfolio_summary(df):
     """
-    Determines cash value available for trading.
-    Manual override takes priority.
+    Tactical summary for Dashboard + Executive Reports.
+    Returns total value, total gain, avg gain%, and risk distribution.
     """
-    if manual_cash is not None:
-        return round(float(manual_cash), 2)
-    if file_value is not None:
-        return round(float(file_value), 2)
-    return 0.00
+    if df is None or df.empty:
+        return None
 
+    total_value = df['Market Value'].sum()
+    total_gain = df['Gain/Loss $'].sum()
+    avg_gain_pct = df['Gain/Loss %'].mean()
 
-def calculate_summary(df, cash_value):
-    """
-    Generates summary stats for dashboard top metrics.
-    """
-    if df.empty:
-        return {
-            "total_value": cash_value,
-            "cash": cash_value,
-            "invested_value": 0,
-            "gain_loss_total": 0,
-            "avg_gain_loss_pct": 0,
-        }
-
-    invested_value = df["Current Value"].sum()
-    gain_loss_total = df["Gain/Loss $"].sum()
-    avg_gain_loss_pct = df["Gain/Loss %"].mean()
-
-    total_value = invested_value + cash_value
+    risk_counts = df['Risk Level'].value_counts().to_dict()
 
     return {
-        "total_value": round(total_value, 2),
-        "cash": round(cash_value, 2),
-        "invested_value": round(invested_value, 2),
-        "gain_loss_total": round(gain_loss_total, 2),
-        "avg_gain_loss_pct": round(avg_gain_loss_pct, 2),
+        "total_value": total_value,
+        "total_gain": total_gain,
+        "avg_gain_pct": avg_gain_pct,
+        "risk_distribution": risk_counts
     }
-
-
-def prepare_portfolio_export(df):
-    """
-    Standard portfolio export for scoring, stops, and tactical briefing.
-    """
-    if df.empty:
-        return df
-
-    export_cols = [
-        "Ticker", "Shares", "Cost Basis", "Current Price",
-        "Current Value", "Gain/Loss $", "Gain/Loss %"
-    ]
-    return df[export_cols].copy()
